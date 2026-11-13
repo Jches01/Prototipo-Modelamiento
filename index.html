@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NumTidy-Audit</title>
+<link rel="stylesheet" href="Css/styles.css">
+<!-- Dependencia: Chart.js 4.4.1 (cdnjs). Sin otras bibliotecas. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head><body>
+<aside id="nav"><h1>NumTidy-Audit</h1><p>Auditoría de estabilidad numérica y rendimiento computacional</p>
+<button data-t="dash" class="on">Dashboard</button><button data-t="lab">Laboratorio experimental</button>
+<button data-t="cmp">Comparador Tidy vs. Matricial</button><button data-t="aud">Auditoría de estabilidad</button>
+<button data-t="doc">Resultados documentados</button><button data-t="hist">Historial y exportación</button></aside>
+<main>
+<section id="dash" class="on"><h2>Dashboard</h2>
+<div id="kpis" class="kpis"></div>
+<p id="empty" class="note">Aún no hay experimentos. Ve al Laboratorio y pulsa «EJECUTAR AUDITORÍA» o ejecuta el experimento de demostración (cálculo real en tu navegador con parámetros predefinidos).</p>
+<div id="charts" class="grid" hidden>
+<div class="card"><h3>LRE mínimo entre órdenes vs. κ (o grado)</h3><div class="cv"><canvas id="c1"></canvas></div></div>
+<div class="card"><h3>Distancia ULP máxima por ruta (log)</h3><div class="cv"><canvas id="c2"></canvas></div></div>
+<div class="card"><h3>Tiempo (ms): conversión vs. cálculo</h3><div class="cv"><canvas id="c3"></canvas></div></div>
+<div class="card"><h3>Memoria estimada (bytes/celda)</h3><div class="cv"><canvas id="c4"></canvas></div></div>
+<div class="card"><h3>Sensibilidad al orden (dispersión relativa, log)</h3><div class="cv"><canvas id="c5"></canvas></div></div>
+<div class="card"><h3>float32 vs. float64 (LRE mínimo)</h3><div class="cv"><canvas id="c6"></canvas></div></div></div></section>
+
+<section id="lab"><h2>Laboratorio experimental</h2>
+<div class="card form">
+<fieldset id="rt"><legend>Rutas / estructuras <span class="hint" title="Las rutas Tidy se implementan como tabla larga en JavaScript, no con pandas/polars.">?</span></legend>
+<label><input type="checkbox" value="tidy" checked> Tidy (tabla larga JS)</label>
+<label><input type="checkbox" value="native" checked> Matricial nativa (Float64Array, por pares)</label>
+<label><input type="checkbox" value="comp" checked> Matricial compensada (Kahan/Welford; QR en regresión)</label>
+<label><input type="checkbox" value="ctrl" checked> Control secuencial no compensado</label>
+<label class="off"><input type="checkbox" disabled> Tidy pandas (requiere backend Python)</label>
+<label class="off"><input type="checkbox" disabled> Tidy polars (requiere backend Python)</label></fieldset>
+<label>Precisión<select id="prec"><option value="64">float64</option><option value="32">float32</option></select></label>
+<label>Operación estructural (ruta Tidy)<select id="st"><option value="melt">melt (orden columna a columna)</option><option value="pivot">pivot (vuelve a fila a fila)</option><option value="sort">sort (ascendente por valor)</option><option value="groupby">groupby (por columna)</option><option value="partition">particionamiento (8 bloques)</option></select></label>
+<label>Operación científica<select id="op"><option value="sum">Sumatoria</option><option value="mean">Media aritmética</option><option value="var">Varianza muestral</option><option value="dot">Producto interno</option><option value="reg">Regresión por mínimos cuadrados (Vandermonde, 40 obs.)</option></select></label>
+<label>Conjunto de datos<select id="ds"><option value="synth">Vector sintético con κ controlado</option><option value="na1">NumAcc1 (generado)</option><option value="na2">NumAcc2 (generado)</option><option value="na3">NumAcc3 (generado)</option><option value="na4">NumAcc4 (generado)</option><option value="csv">CSV cargado</option></select></label>
+<label>Archivo CSV<input type="file" id="csv" accept=".csv,.txt"></label>
+<label>Condicionamiento<select id="kl"><option value="bien">Bien condicionado (κ=10²; regr. grado 3)</option><option value="mod">Moderado (κ=10⁶; grado 6)</option><option value="mal">Mal condicionado (κ=10¹⁰; grado 9)</option><option value="ext">Extremo (κ=10¹⁵; grado 12)</option></select></label>
+<label>κ manual (1–10¹⁶) o grado 2–13 en regresión<input id="kv" type="number" step="any" placeholder="vacío = nivel"></label>
+<label>Orden de datos<select id="ord"><option value="orig">Original</option><option value="asc">Ascendente</option><option value="desc">Descendente</option><option value="perm">Permutación aleatoria</option></select></label>
+<label>Semilla<input id="seed" type="number" value="42"></label>
+<label>Filas<input id="R" type="number" value="50" min="1"></label>
+<label>Columnas<input id="C" type="number" value="40" min="1"></label>
+<div class="btns"><button id="run" class="pri">EJECUTAR AUDITORÍA</button><button id="demo">Experimento de demostración</button><button id="reset">Restablecer</button></div>
+<div id="msg" class="msg"></div></div>
+<div class="card" id="res"><p class="note">Sin resultados todavía.</p></div></section>
+
+<section id="cmp"><h2>Comparador Tidy vs. Matricial</h2>
+<div class="card form"><label>Filas<input id="cR" type="number" value="3" min="1" max="12"></label><label>Columnas<input id="cC" type="number" value="4" min="1" max="12"></label><label>Semilla<input id="cS" type="number" value="1"></label>
+<div class="btns"><button id="cgo" class="pri">Generar → melt → pivot</button></div></div>
+<p class="note">Matriz original → melt → tabla Tidy → pivot → matriz reconstruida. melt y pivot son transformaciones estructurales (copian valores y generan índices, sin aritmética); el error numérico se estudia en las operaciones aritméticas posteriores.</p>
+<div id="cout" class="grid"></div></section>
+
+<section id="aud"><h2>Auditoría de estabilidad numérica</h2>
+<div class="grid">
+<div class="card"><h3>Error relativo</h3><p>εrel = |q̂ − q|/|q|. Magnitud proporcional del error frente a la referencia.</p></div>
+<div class="card"><h3>LRE</h3><p>−log₁₀(εrel): dígitos decimales significativos conservados (tope 15,95 en float64 y 7,22 en float32).</p></div>
+<div class="card"><h3>Distancia ULP</h3><p>Valores representables del formato evaluado entre el resultado y la referencia redondeada a ese formato.</p></div>
+<div class="card"><h3>Sensibilidad al orden</h3><p>Se evalúan orden seleccionado, original, ascendente, descendente y 5 permutaciones. La dispersión es (máx−mín)/|referencia|.</p></div>
+<div class="card"><h3>Número de condición κ</h3><p>Suma: Σ|xᵢ|/|Σxᵢ|. Es propiedad del problema, no del algoritmo. El LRE cae aprox. con log₁₀κ (ver gráfico 1 del Dashboard).</p></div>
+<div class="card"><h3>Referencia</h3><p>Suma, producto interno y varianza usan aritmética entera exacta (BigInt) sobre los datos almacenados. No es mpmath a 256 bits: eso queda para el backend Python.</p></div></div>
+<div class="card" id="audt"><p class="note">Ejecuta un experimento para ver el LRE por orden.</p></div></section>
+
+<section id="doc"><h2>Resultados documentados</h2>
+<p class="warn">Valores del estudio original (Python 3.12.3, NumPy 2.5.4, pandas 3.0.6, polars 2.1.0, mpmath 256 bits, una CPU). NO fueron producidos por esta aplicación. Limitaciones del estudio: n=2000 y N≤2000, un solo núcleo, tiempos variables sin intervalos de confianza, 10 permutaciones por caso, precisión interna de acumuladores de pandas/polars no controlada, sin NumAcc Michelson/Longley/Filip ni matrices de Hilbert, y explicaciones sobre groupby/Welford son hipótesis no verificadas en el código de las bibliotecas. Describen asociaciones, no causalidad.</p>
+<div class="card"><table><thead><tr><th>Resultado documentado</th></tr></thead><tbody>
+<tr><td>melt → pivot recuperó la matriz original bit a bit.</td></tr>
+<tr><td>Tabla larga con índices int64: factor de memoria 3,0 sobre la matriz float64.</td></tr>
+<tr><td>Tabla larga pandas con etiquetas de columna como objeto: factor 6,5.</td></tr>
+<tr><td>Pico de memoria durante melt: ≈7 veces el tamaño de la matriz (7,0–7,7).</td></tr>
+<tr><td>Suma por columna con groupby: entre 25 y 383 veces más lenta que A.sum(axis=0).</td></tr>
+<tr><td>Incluyendo melt, la razón total de tiempos osciló entre 163 y 1665.</td></tr>
+<tr><td>κ≈3×10¹⁰, suma float64: 5,3 dígitos (Tidy pandas) y 7,2 (compensada).</td></tr>
+<tr><td>κ≈10¹⁶: ruta compensada 2,0 dígitos; varias rutas no compensadas llegaron a 0.</td></tr>
+<tr><td>Regresión con κ≈4,1×10⁹: SVD conservó 7 dígitos; ecuaciones normales llegaron a 0.</td></tr></tbody></table></div></section>
+
+<section id="hist"><h2>Historial y exportación</h2>
+<div class="btns"><button id="xall">Descargar informe comparativo (JSON)</button><button id="xcsv">Descargar historial (CSV)</button><button id="xclr">Borrar historial</button></div>
+<div class="card" id="ht"></div><pre id="cfgv" class="card" hidden></pre></section>
+</main><script src="js/script.js"></script></body></html>
